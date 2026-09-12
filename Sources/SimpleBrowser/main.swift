@@ -46,6 +46,9 @@ struct BrowserScreen: View {
     @State private var availableRelease: GitHubRelease?
     @State private var isSubmitting = false
     @State private var isCheckingReleases = false
+    @State private var weatherMessage = ""
+    @State private var isCheckingWeather = false
+    @State private var isWeatherPresented = false
     @State private var loadError: String?
 
     var body: some View {
@@ -120,7 +123,20 @@ struct BrowserScreen: View {
                 }
                 .disabled(isCheckingReleases || BuildInfo.user == "local")
                 .help("Check GitHub for a newer release for this app user")
+
+                Button(isCheckingWeather ? "Checking weather…" : "Valencia weather") {
+                    Task {
+                        await checkValenciaWeather()
+                    }
+                }
+                .disabled(isCheckingWeather)
+                .help("Show current weather conditions in Valencia")
             }
+        }
+        .alert("Valencia weather", isPresented: $isWeatherPresented) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(weatherMessage)
         }
     }
 
@@ -260,6 +276,20 @@ struct BrowserScreen: View {
             // A missed network check should not interrupt browsing or issue submission.
         }
     }
+
+    private func checkValenciaWeather() async {
+        isCheckingWeather = true
+        defer {
+            isCheckingWeather = false
+            isWeatherPresented = true
+        }
+
+        do {
+            weatherMessage = try await ValenciaWeatherService.currentConditions()
+        } catch {
+            weatherMessage = "Current weather is unavailable. Please try again shortly."
+        }
+    }
 }
 
 enum GitHubIssueService {
@@ -365,6 +395,57 @@ enum GitHubReleaseService {
     }
 
     private enum ReleaseLookupError: Error {
+        case unavailable
+    }
+}
+
+enum ValenciaWeatherService {
+    private static let weatherURL = URL(string: "https://api.open-meteo.com/v1/forecast?latitude=39.4699&longitude=-0.3763&current=temperature_2m,weather_code&timezone=Europe%2FMadrid")!
+
+    static func currentConditions() async throws -> String {
+        let (data, response) = try await URLSession.shared.data(from: weatherURL)
+        guard let httpResponse = response as? HTTPURLResponse,
+              200..<300 ~= httpResponse.statusCode else {
+            throw WeatherError.unavailable
+        }
+
+        let forecast = try JSONDecoder().decode(Forecast.self, from: data)
+        return "\(formattedTemperature(forecast.current.temperature)) • \(description(for: forecast.current.weatherCode))"
+    }
+
+    private static func formattedTemperature(_ temperature: Double) -> String {
+        String(format: "%.1f°C", temperature)
+    }
+
+    private static func description(for code: Int) -> String {
+        switch code {
+        case 0: return "Clear sky"
+        case 1, 2: return "Partly cloudy"
+        case 3: return "Overcast"
+        case 45, 48: return "Foggy"
+        case 51, 53, 55, 56, 57: return "Drizzle"
+        case 61, 63, 65, 66, 67, 80, 81, 82: return "Rain"
+        case 71, 73, 75, 77, 85, 86: return "Snow"
+        case 95, 96, 99: return "Thunderstorm"
+        default: return "Current conditions"
+        }
+    }
+
+    private struct Forecast: Decodable {
+        let current: CurrentConditions
+    }
+
+    private struct CurrentConditions: Decodable {
+        let temperature: Double
+        let weatherCode: Int
+
+        enum CodingKeys: String, CodingKey {
+            case temperature = "temperature_2m"
+            case weatherCode = "weather_code"
+        }
+    }
+
+    private enum WeatherError: Error {
         case unavailable
     }
 }
