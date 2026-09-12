@@ -24,6 +24,18 @@ When a newer release is found, the app downloads its ZIP archive in the backgrou
 
 Downloads started from a rendered web page are saved to the Mac's Downloads folder. Their status appears in the requirements submission-status area.
 
+## BYOB automation
+
+Address issues in [https://github.com/antonogeorge07-lang/BYOB](https://github.com/antonogeorge07-lang/BYOB)
+
+Handle issues one by another.
+
+Read user name and requirements from the issue. Implement it in a branch which name is `user/` following by the user name. Create such a branch if necessary. Once done, push the branch to GitHub.
+
+Then add a comment to the issue explaining in details what was done.
+
+Finally, mark the issue as closed.
+
 ## License
 
 Licensed under the [MIT License](LICENSE). You may use, modify, and redistribute this software, including commercially, provided you retain the copyright and license notices.
