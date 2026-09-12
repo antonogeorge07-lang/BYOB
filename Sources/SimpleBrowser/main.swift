@@ -168,7 +168,9 @@ struct BrowserScreen: View {
                     .foregroundStyle(.secondary)
                 Text("A newer version is available: \(availableRelease.name)")
                     .font(.subheadline)
-                Link("Open release", destination: availableRelease.url)
+                Button("Open release") {
+                    openInBrowser(availableRelease.url)
+                }
                     .font(.subheadline)
             }
 
@@ -195,6 +197,12 @@ struct BrowserScreen: View {
         }
 
         address = normalizedAddress
+        loadError = nil
+        loadedURL = url
+    }
+
+    private func openInBrowser(_ url: URL) {
+        address = url.absoluteString
         loadError = nil
         loadedURL = url
     }
