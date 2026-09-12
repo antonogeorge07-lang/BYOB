@@ -44,6 +44,7 @@ struct BrowserScreen: View {
     @State private var userName = BuildInfo.user
     @State private var requirements = ""
     @State private var loadedURL = URL(string: "https://www.apple.com")!
+    @State private var navigationRequestID = 0
     @State private var submissionStatus = ""
     @State private var availableRelease: GitHubRelease?
     @State private var downloadedUpdate: DownloadedUpdate?
@@ -64,7 +65,7 @@ struct BrowserScreen: View {
 
             HSplitView {
                 ZStack {
-                    BrowserWebView(url: loadedURL) { downloadStatus in
+                    BrowserWebView(url: loadedURL, requestID: navigationRequestID) { downloadStatus in
                         submissionStatus = downloadStatus
                     }
 
@@ -223,12 +224,14 @@ struct BrowserScreen: View {
         address = normalizedAddress
         loadError = nil
         loadedURL = url
+        navigationRequestID += 1
     }
 
     private func openInBrowser(_ url: URL) {
         address = url.absoluteString
         loadError = nil
         loadedURL = url
+        navigationRequestID += 1
     }
 
     private func submitMessage() {
@@ -585,6 +588,7 @@ enum UpdateHandoff {
 
 struct BrowserWebView: NSViewRepresentable {
     let url: URL
+    let requestID: Int
     let onDownloadStatus: (String) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -598,18 +602,21 @@ struct BrowserWebView: NSViewRepresentable {
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
         webView.navigationDelegate = context.coordinator
+        context.coordinator.requestID = requestID
         webView.load(URLRequest(url: url))
         return webView
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
         context.coordinator.onDownloadStatus = onDownloadStatus
-        guard webView.url != url else { return }
+        guard context.coordinator.requestID != requestID else { return }
+        context.coordinator.requestID = requestID
         webView.load(URLRequest(url: url))
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKDownloadDelegate {
         var onDownloadStatus: (String) -> Void
+        var requestID = -1
         private var destinations: [ObjectIdentifier: URL] = [:]
 
         init(onDownloadStatus: @escaping (String) -> Void) {
