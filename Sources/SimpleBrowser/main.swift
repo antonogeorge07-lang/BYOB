@@ -45,6 +45,7 @@ struct BrowserScreen: View {
     @State private var submissionStatus = ""
     @State private var availableRelease: GitHubRelease?
     @State private var isSubmitting = false
+    @State private var isCheckingReleases = false
     @State private var loadError: String?
 
     var body: some View {
@@ -109,6 +110,16 @@ struct BrowserScreen: View {
                     .frame(width: 72, alignment: .leading)
 
                 NativeTextField(placeholder: "Enter your name", text: $userName)
+
+                Button(isCheckingReleases ? "Checking…" : "Check updates") {
+                    Task {
+                        isCheckingReleases = true
+                        await checkForReleaseUpdate()
+                        isCheckingReleases = false
+                    }
+                }
+                .disabled(isCheckingReleases || BuildInfo.user == "local")
+                .help("Check GitHub for a newer release for this app user")
             }
         }
     }

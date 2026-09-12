@@ -18,7 +18,7 @@ Push a version tag such as `v1.0.0`, push to any branch named `user/...`, or run
 
 The packaged app's **About Simple Browser** menu item shows the release user and version. Those values are embedded when GitHub Actions builds the release.
 
-The app also checks GitHub for newer releases for the embedded user every five minutes. When it finds one, it displays an update link in the requirements submission-status area.
+The app also checks GitHub for newer releases for the embedded user every five minutes, and the **Check updates** button beside the name field runs the check immediately. When it finds one, it displays an update link in the requirements submission-status area.
 
 ## License
 
