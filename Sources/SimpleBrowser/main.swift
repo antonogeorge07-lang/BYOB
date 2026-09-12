@@ -28,6 +28,7 @@ struct BrowserScreen: View {
     @State private var loadedURL = URL(string: "https://www.apple.com")!
     @State private var submittedMessage = ""
     @State private var loadError: String?
+    @State private var webView: WKWebView?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,7 +40,9 @@ struct BrowserScreen: View {
 
             HSplitView {
                 ZStack {
-                    BrowserWebView(url: loadedURL)
+                    BrowserWebView(url: loadedURL) { createdWebView in
+                        webView = createdWebView
+                    }
 
                     if let loadError {
                         VStack(spacing: 10) {
@@ -69,6 +72,11 @@ struct BrowserScreen: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
+                Button(action: { webView?.goBack() }) {
+                    Label("Back", systemImage: "chevron.backward")
+                }
+                .help("Return to the previous page")
+
                 Image(systemName: "globe")
                     .foregroundStyle(.tint)
 
@@ -168,6 +176,7 @@ struct BrowserScreen: View {
 
 struct BrowserWebView: NSViewRepresentable {
     let url: URL
+    let onWebViewCreated: (WKWebView) -> Void
 
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
@@ -176,6 +185,9 @@ struct BrowserWebView: NSViewRepresentable {
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
         webView.load(URLRequest(url: url))
+        DispatchQueue.main.async {
+            onWebViewCreated(webView)
+        }
         return webView
     }
 

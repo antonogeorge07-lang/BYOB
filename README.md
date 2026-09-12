@@ -1,6 +1,6 @@
 # Simple Browser
 
-A minimal native macOS browser window with an address field, name field, embedded web page, and a message submission pane.
+A minimal native macOS browser window with an address field, name field, embedded web page, Back button, and a message submission pane.
 
 ## Run
 
