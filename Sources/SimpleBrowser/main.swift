@@ -39,6 +39,26 @@ enum BuildInfo {
     static let version = Bundle.main.object(forInfoDictionaryKey: "BuildVersion") as? String ?? "0"
 }
 
+enum BrowserService: String, CaseIterable, Identifiable {
+    case openAI = "OpenAI"
+    case openRouter = "OpenRouter"
+    case vds = "VDS"
+    case copilotKit = "Co-pilot Kit"
+    case exa = "EXA"
+
+    var id: String { rawValue }
+
+    var url: URL {
+        switch self {
+        case .openAI: return URL(string: "https://chatgpt.com")!
+        case .openRouter: return URL(string: "https://openrouter.ai")!
+        case .vds: return URL(string: "https://www.google.com/search?q=VDS+hosting")!
+        case .copilotKit: return URL(string: "https://copilotkit.ai")!
+        case .exa: return URL(string: "https://exa.ai")!
+        }
+    }
+}
+
 struct BrowserTab: Codable, Identifiable {
     let id: UUID
     var url: URL
@@ -186,6 +206,17 @@ struct BrowserScreen: View {
 
                 Button("Open", action: openAddress)
                     .keyboardShortcut(.return, modifiers: .command)
+
+                Menu {
+                    ForEach(BrowserService.allCases) { service in
+                        Button(service.rawValue) {
+                            openInBrowser(service.url)
+                        }
+                    }
+                } label: {
+                    Label("Services", systemImage: "square.grid.2x2")
+                }
+                .help("Open a service in this browser pane")
 
             }
 
