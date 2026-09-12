@@ -4,7 +4,7 @@ Simple Browser is a minimal native macOS browser window that you can customize f
 
 The project relies on GitHub functionality including Issues, Actions, and Releases. To use the customization flow, you need access to the GitHub repository and the command-line GitHub tool (`gh`) authorized to access GitHub on your Mac.
 
-The **Services** menu opens OpenAI, OpenRouter, VDS hosting search, Co-pilot Kit, and EXA directly in the browser pane.
+The **Services** menu opens OpenAI, OpenRouter, VDS hosting search, Co-pilot Kit, EXA, and MS Office directly in the browser pane.
 
 Use the **+** button to open additional tabs. The selected tab controls the URL line, and the open tabs and their current pages are restored after restarting or switching to an update. Control-click a tab to close it. Press **Shift–Return** to submit a feature request.
 

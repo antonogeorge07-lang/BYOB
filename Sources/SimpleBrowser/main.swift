@@ -45,6 +45,7 @@ enum BrowserService: String, CaseIterable, Identifiable {
     case vds = "VDS"
     case copilotKit = "Co-pilot Kit"
     case exa = "EXA"
+    case microsoftOffice = "MS Office"
 
     var id: String { rawValue }
 
@@ -55,6 +56,7 @@ enum BrowserService: String, CaseIterable, Identifiable {
         case .vds: return URL(string: "https://www.google.com/search?q=VDS+hosting")!
         case .copilotKit: return URL(string: "https://copilotkit.ai")!
         case .exa: return URL(string: "https://exa.ai")!
+        case .microsoftOffice: return URL(string: "https://www.office.com")!
         }
     }
 }
