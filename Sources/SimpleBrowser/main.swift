@@ -1,6 +1,7 @@
 import SwiftUI
 import WebKit
 import AppKit
+import Foundation
 
 @main
 struct SimpleBrowserApp: App {
@@ -24,9 +25,10 @@ struct SimpleBrowserApp: App {
 struct BrowserScreen: View {
     @State private var address = "https://www.apple.com"
     @State private var userName = ""
-    @State private var message = ""
+    @State private var requirements = ""
     @State private var loadedURL = URL(string: "https://www.apple.com")!
-    @State private var submittedMessage = ""
+    @State private var submissionStatus = ""
+    @State private var isSubmitting = false
     @State private var loadError: String?
 
     var body: some View {
@@ -94,14 +96,14 @@ struct BrowserScreen: View {
 
     private var submissionPane: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Message", systemImage: "paperplane")
+            Label("New feature requirements", systemImage: "lightbulb")
                 .font(.headline)
 
-            Text(userName.isEmpty ? "Write a message to submit." : "Writing as \(userName).")
+            Text("Enter your name above, describe the feature here, and Submit will create an issue in this repository.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            TextEditor(text: $message)
+            TextEditor(text: $requirements)
                 .font(.body)
                 .padding(6)
                 .background(Color(nsColor: .textBackgroundColor))
@@ -113,18 +115,18 @@ struct BrowserScreen: View {
                 .frame(minHeight: 150)
 
             Button(action: submitMessage) {
-                Label("Submit", systemImage: "arrow.up.circle.fill")
+                Label(isSubmitting ? "Creating issue…" : "Submit", systemImage: "arrow.up.circle.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(isSubmitting || userName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || requirements.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-            if !submittedMessage.isEmpty {
+            if !submissionStatus.isEmpty {
                 Divider()
-                Text("Last submission")
+                Text("Submission status")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(submittedMessage)
+                Text(submissionStatus)
                     .font(.subheadline)
                     .textSelection(.enabled)
             }
@@ -157,12 +159,98 @@ struct BrowserScreen: View {
     }
 
     private func submitMessage() {
-        let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedMessage.isEmpty else { return }
+        let requester = userName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedRequirements = requirements.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !requester.isEmpty, !trimmedRequirements.isEmpty else { return }
 
-        let sender = userName.trimmingCharacters(in: .whitespacesAndNewlines)
-        submittedMessage = sender.isEmpty ? trimmedMessage : "\(sender): \(trimmedMessage)"
-        message = ""
+        isSubmitting = true
+        submissionStatus = "Creating GitHub issue…"
+
+        Task {
+            do {
+                let issueURL = try await GitHubIssueService.createIssue(
+                    requester: requester,
+                    requirements: trimmedRequirements
+                )
+                requirements = ""
+                submissionStatus = "Issue created: \(issueURL.absoluteString)"
+            } catch {
+                submissionStatus = "Couldn’t create the issue: \(error.localizedDescription)"
+            }
+            isSubmitting = false
+        }
+    }
+}
+
+enum GitHubIssueService {
+    private static let repository = "antonogeorge07-lang/BYOB"
+
+    static func createIssue(requester: String, requirements: String) async throws -> URL {
+        try await Task.detached(priority: .userInitiated) {
+            let title = "Feature request from \(requester)"
+            let body = "## Requested by\n\(requester)\n\n## Requirements\n\(requirements)"
+            let payload = try JSONEncoder().encode(["title": title, "body": body])
+
+            let process = Process()
+            process.executableURL = githubCLIURL()
+            process.arguments = [
+                "api", "repos/\(repository)/issues",
+                "--method", "POST",
+                "--input", "-"
+            ]
+
+            let input = Pipe()
+            let output = Pipe()
+            let error = Pipe()
+            process.standardInput = input
+            process.standardOutput = output
+            process.standardError = error
+
+            try process.run()
+            input.fileHandleForWriting.write(payload)
+            input.fileHandleForWriting.closeFile()
+            process.waitUntilExit()
+
+            let outputData = output.fileHandleForReading.readDataToEndOfFile()
+            let errorData = error.fileHandleForReading.readDataToEndOfFile()
+
+            guard process.terminationStatus == 0 else {
+                let message = String(data: errorData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                throw IssueCreationError.failed(message?.isEmpty == false ? message! : "GitHub CLI exited with status \(process.terminationStatus).")
+            }
+
+            let response = try JSONDecoder().decode(GitHubIssueResponse.self, from: outputData)
+            guard let url = URL(string: response.htmlURL) else {
+                throw IssueCreationError.failed("GitHub returned an invalid issue URL.")
+            }
+            return url
+        }.value
+    }
+
+    private static func githubCLIURL() -> URL {
+        let candidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"]
+        if let path = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+            return URL(fileURLWithPath: path)
+        }
+        return URL(fileURLWithPath: "/usr/bin/env")
+    }
+
+    private struct GitHubIssueResponse: Decodable {
+        let htmlURL: String
+
+        enum CodingKeys: String, CodingKey {
+            case htmlURL = "html_url"
+        }
+    }
+
+    private enum IssueCreationError: LocalizedError {
+        case failed(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .failed(let message): return message
+            }
+        }
     }
 }
 
