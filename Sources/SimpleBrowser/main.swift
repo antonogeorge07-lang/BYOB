@@ -30,6 +30,7 @@ struct BrowserScreen: View {
     @State private var submissionStatus = ""
     @State private var isSubmitting = false
     @State private var loadError: String?
+    @State private var isGreetingPresented = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -90,7 +91,23 @@ struct BrowserScreen: View {
                     .frame(width: 72, alignment: .leading)
 
                 NativeTextField(placeholder: "Enter your name", text: $userName)
+
+                Button("Show greeting") {
+                    isGreetingPresented = true
+                }
             }
+        }
+        .sheet(isPresented: $isGreetingPresented) {
+            VStack(spacing: 20) {
+                Text("Hello World!")
+                    .font(.title2)
+                Button("Close") {
+                    isGreetingPresented = false
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(32)
+            .frame(minWidth: 280, minHeight: 150)
         }
     }
 

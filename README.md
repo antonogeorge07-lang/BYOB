@@ -1,6 +1,6 @@
 # Simple Browser
 
-A minimal native macOS browser window with an address field, name field, embedded web page, and a feature-requirements pane. Submitting a requirement opens a GitHub issue in `antonogeorge07-lang/BYOB` using the signed-in GitHub CLI account on the Mac.
+A minimal native macOS browser window with an address field, name field, greeting popup, embedded web page, and a feature-requirements pane. Submitting a requirement opens a GitHub issue in `antonogeorge07-lang/BYOB` using the signed-in GitHub CLI account on the Mac.
 
 ## Run
 
