@@ -43,6 +43,7 @@ struct BrowserScreen: View {
     @State private var requirements = ""
     @State private var loadedURL = URL(string: "https://www.apple.com")!
     @State private var submissionStatus = ""
+    @State private var availableRelease: GitHubRelease?
     @State private var isSubmitting = false
     @State private var loadError: String?
 
@@ -80,6 +81,9 @@ struct BrowserScreen: View {
                     .frame(minWidth: 260, idealWidth: 310, maxWidth: 380)
                     .padding(16)
             }
+        }
+        .task {
+            await watchForReleaseUpdates()
         }
     }
 
@@ -146,6 +150,17 @@ struct BrowserScreen: View {
                     .textSelection(.enabled)
             }
 
+            if let availableRelease {
+                Divider()
+                Text("Release update")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("A newer version is available: \(availableRelease.name)")
+                    .font(.subheadline)
+                Link("Open release", destination: availableRelease.url)
+                    .font(.subheadline)
+            }
+
             Spacer()
         }
     }
@@ -193,6 +208,37 @@ struct BrowserScreen: View {
                 submissionStatus = "Couldn’t create the issue: \(error.localizedDescription)"
             }
             isSubmitting = false
+        }
+    }
+
+    private func watchForReleaseUpdates() async {
+        while !Task.isCancelled {
+            await checkForReleaseUpdate()
+            try? await Task.sleep(nanoseconds: 300_000_000_000)
+        }
+    }
+
+    private func checkForReleaseUpdate() async {
+        guard BuildInfo.user != "local", let currentVersion = Int(BuildInfo.version) else {
+            return
+        }
+
+        do {
+            let releases = try await GitHubReleaseService.fetchReleases()
+            let releasePrefix = "Simple Browser — \(BuildInfo.user)-"
+            availableRelease = releases
+                .compactMap { release -> (GitHubRelease, Int)? in
+                    guard release.name.hasPrefix(releasePrefix),
+                          let version = Int(release.name.dropFirst(releasePrefix.count)),
+                          version > currentVersion else {
+                        return nil
+                    }
+                    return (release, version)
+                }
+                .max { $0.1 < $1.1 }?
+                .0
+        } catch {
+            // A missed network check should not interrupt browsing or issue submission.
         }
     }
 }
@@ -266,6 +312,41 @@ enum GitHubIssueService {
             case .failed(let message): return message
             }
         }
+    }
+}
+
+struct GitHubRelease: Decodable {
+    let name: String
+    let htmlURL: String
+
+    var url: URL {
+        URL(string: htmlURL)!
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case htmlURL = "html_url"
+    }
+}
+
+enum GitHubReleaseService {
+    private static let releasesURL = URL(string: "https://api.github.com/repos/antonogeorge07-lang/BYOB/releases")!
+
+    static func fetchReleases() async throws -> [GitHubRelease] {
+        var request = URLRequest(url: releasesURL)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("SimpleBrowser", forHTTPHeaderField: "User-Agent")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              200..<300 ~= httpResponse.statusCode else {
+            throw ReleaseLookupError.unavailable
+        }
+        return try JSONDecoder().decode([GitHubRelease].self, from: data)
+    }
+
+    private enum ReleaseLookupError: Error {
+        case unavailable
     }
 }
 
