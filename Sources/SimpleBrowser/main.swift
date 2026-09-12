@@ -125,6 +125,7 @@ struct BrowserScreen: View {
     @State private var currentPageContext: PageContext?
     @State private var tabs: [BrowserTab]
     @State private var selectedTabID: UUID
+    @AppStorage("browser-points") private var points = 0
 
     init() {
         if let session = BrowserSessionStore.load(),
@@ -201,6 +202,7 @@ struct BrowserScreen: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
             tabBar
+            gameStatus
 
             HStack(spacing: 10) {
                 Image(systemName: "globe")
@@ -252,6 +254,22 @@ struct BrowserScreen: View {
                     .help("Switch to the downloaded version")
                 }
             }
+        }
+    }
+
+    private var gameStatus: some View {
+        let progress = points % 100
+        return HStack(spacing: 8) {
+            Label("Level \(points / 100 + 1)", systemImage: "star.fill")
+                .foregroundStyle(.orange)
+            ProgressView(value: Double(progress), total: 100)
+                .frame(width: 120)
+            Text("\(points) points")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("\(100 - progress) to next level")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -361,6 +379,7 @@ struct BrowserScreen: View {
         loadedURL = url
         navigationRequestID += 1
         updateSelectedTab(url: url, title: url.host ?? url.absoluteString)
+        earn(points: 5)
     }
 
     private func openInBrowser(_ url: URL) {
@@ -369,12 +388,14 @@ struct BrowserScreen: View {
         loadedURL = url
         navigationRequestID += 1
         updateSelectedTab(url: url, title: url.host ?? url.absoluteString)
+        earn(points: 1)
     }
 
     private func addTab() {
         let tab = BrowserTab(url: URL(string: "https://www.apple.com")!, title: "New tab")
         tabs.append(tab)
         select(tab)
+        earn(points: 2)
     }
 
     private func select(_ tab: BrowserTab) {
@@ -412,6 +433,10 @@ struct BrowserScreen: View {
         BrowserSessionStore.save(tabs: tabs, selectedTabID: selectedTabID)
     }
 
+    private func earn(points earned: Int) {
+        points += earned
+    }
+
     private func submitMessage() {
         let requester = userName.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedRequirements = requirements.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -428,6 +453,7 @@ struct BrowserScreen: View {
                 )
                 requirements = ""
                 submissionStatus = "Issue created: \(issueURL.absoluteString)"
+                earn(points: 10)
             } catch {
                 submissionStatus = "Couldn’t create the issue: \(error.localizedDescription)"
             }

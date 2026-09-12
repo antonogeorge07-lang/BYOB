@@ -8,6 +8,8 @@ The **Services** menu opens Slack, Google Workspace, MS Office, News, Local Weat
 
 Use the **+** button to open additional tabs. The selected tab controls the URL line, and the open tabs and their current pages are restored after restarting or switching to an update. Control-click a tab to close it. Press **Shift–Return** to submit a feature request.
 
+The browser includes a lightweight game layer: opening pages, adding tabs, and submitting feature requests earns persistent points. Every 100 points advances your level.
+
 ## Download and run
 
 1. Download [SimpleBrowser-macos.zip from v1.0.1](https://github.com/antonogeorge07-lang/BYOB/releases/download/v1.0.1/SimpleBrowser-macos.zip).
