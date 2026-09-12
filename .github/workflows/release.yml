@@ -30,6 +30,38 @@ jobs:
       - name: Build release executable
         run: swift build -c release
 
+      - name: Determine release metadata
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            BUILD_USER="manual"
+            BUILD_VERSION="${{ inputs.tag }}"
+            RELEASE_TAG="${{ inputs.tag }}"
+            PRERELEASE="false"
+          elif [ "${REF_TYPE}" = "branch" ]; then
+            BUILD_USER="${REF_NAME#user/}"
+            USER_SLUG="$(echo "${BUILD_USER}" | tr '/' '-')"
+            git fetch origin main
+            BUILD_VERSION="$(git rev-list --count origin/main..HEAD)"
+            RELEASE_TAG="${USER_SLUG}-${BUILD_VERSION}-${GITHUB_SHA:0:7}"
+            PRERELEASE="true"
+          else
+            BUILD_USER="release"
+            BUILD_VERSION="${REF_NAME#v}"
+            RELEASE_TAG="${REF_NAME}"
+            PRERELEASE="false"
+          fi
+
+          {
+            echo "BUILD_USER=${BUILD_USER}"
+            echo "BUILD_VERSION=${BUILD_VERSION}"
+            echo "RELEASE_TAG=${RELEASE_TAG}"
+            echo "PRERELEASE=${PRERELEASE}"
+          } >> "${GITHUB_ENV}"
+
       - name: Package the macOS app
         run: |
           APP_NAME="Simple Browser.app"
@@ -37,33 +69,26 @@ jobs:
           mkdir -p "${APP_PATH}/Contents/MacOS"
           cp AppBundle/Info.plist "${APP_PATH}/Contents/Info.plist"
           cp .build/arm64-apple-macosx/release/SimpleBrowser "${APP_PATH}/Contents/MacOS/SimpleBrowser"
+          /usr/libexec/PlistBuddy -c "Set :BuildUser ${BUILD_USER}" "${APP_PATH}/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :BuildVersion ${BUILD_VERSION}" "${APP_PATH}/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${BUILD_USER}-${BUILD_VERSION}" "${APP_PATH}/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_VERSION}" "${APP_PATH}/Contents/Info.plist"
           codesign --force --deep --sign - "${APP_PATH}"
           ditto -c -k --sequesterRsrc --keepParent "${APP_PATH}" SimpleBrowser-macos.zip
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          EVENT_NAME: ${{ github.event_name }}
-          REF_TYPE: ${{ github.ref_type }}
-          REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
-            gh release create "${{ inputs.tag }}" SimpleBrowser-macos.zip \
-              --target "${GITHUB_SHA}" \
-              --title "Simple Browser ${{ inputs.tag }}" \
-              --generate-notes
-          elif [ "${REF_TYPE}" = "branch" ]; then
-            USER_NAME="${REF_NAME#user/}"
-            USER_SLUG="$(echo "${USER_NAME}" | tr '/' '-')"
-            git fetch origin main
-            VERSION="$(git rev-list --count origin/main..HEAD)"
-            BUILD_TAG="${USER_SLUG}-${VERSION}-${GITHUB_SHA:0:7}"
-            gh release create "${BUILD_TAG}" SimpleBrowser-macos.zip \
-              --title "Simple Browser — ${USER_NAME}-${VERSION}" \
-              --notes "Automated build for ${USER_NAME}, version ${VERSION} (commits ahead of main), at commit \`${GITHUB_SHA}\`." \
+          RELEASE_TITLE="Simple Browser — ${BUILD_USER}-${BUILD_VERSION}"
+          if [ "${PRERELEASE}" = "true" ]; then
+            gh release create "${RELEASE_TAG}" SimpleBrowser-macos.zip \
+              --title "${RELEASE_TITLE}" \
+              --notes "Automated build for ${BUILD_USER}, version ${BUILD_VERSION} (commits ahead of main), at commit \`${GITHUB_SHA}\`." \
               --prerelease
           else
-            gh release create "${REF_NAME}" SimpleBrowser-macos.zip \
-              --title "Simple Browser ${REF_NAME}" \
+            gh release create "${RELEASE_TAG}" SimpleBrowser-macos.zip \
+              --target "${GITHUB_SHA}" \
+              --title "${RELEASE_TITLE}" \
               --generate-notes
           fi

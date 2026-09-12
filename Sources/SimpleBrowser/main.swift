@@ -19,7 +19,22 @@ struct SimpleBrowserApp: App {
                 .frame(minWidth: 900, minHeight: 620)
         }
         .defaultSize(width: 1100, height: 720)
+        .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About Simple Browser") {
+                    NSApp.orderFrontStandardAboutPanel(options: [
+                        .applicationName: "Simple Browser",
+                        .applicationVersion: "\(BuildInfo.user)-\(BuildInfo.version)"
+                    ])
+                }
+            }
+        }
     }
+}
+
+enum BuildInfo {
+    static let user = Bundle.main.object(forInfoDictionaryKey: "BuildUser") as? String ?? "local"
+    static let version = Bundle.main.object(forInfoDictionaryKey: "BuildVersion") as? String ?? "0"
 }
 
 struct BrowserScreen: View {
