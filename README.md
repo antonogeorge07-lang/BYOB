@@ -4,6 +4,8 @@ Simple Browser is a minimal native macOS browser window that you can customize f
 
 The project relies on GitHub functionality including Issues, Actions, and Releases. To use the customization flow, you need access to the GitHub repository and the command-line GitHub tool (`gh`) authorized to access GitHub on your Mac.
 
+The **Services** menu opens Slack, Google Workspace, MS Office, News, Local Weather, OpenAI, OpenRouter, VDS hosting search, Co-pilot Kit, and EXA directly in the browser pane.
+
 ## Download and run
 
 1. Download [SimpleBrowser-macos.zip from v1.0.1](https://github.com/antonogeorge07-lang/BYOB/releases/download/v1.0.1/SimpleBrowser-macos.zip).

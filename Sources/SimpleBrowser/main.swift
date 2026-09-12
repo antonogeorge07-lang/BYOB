@@ -39,6 +39,36 @@ enum BuildInfo {
     static let version = Bundle.main.object(forInfoDictionaryKey: "BuildVersion") as? String ?? "0"
 }
 
+enum BrowserService: String, CaseIterable, Identifiable {
+    case slack = "Slack"
+    case googleWorkspace = "Google Workspace"
+    case microsoftOffice = "MS Office"
+    case news = "News"
+    case localWeather = "Local Weather"
+    case openAI = "OpenAI"
+    case openRouter = "OpenRouter"
+    case vds = "VDS"
+    case copilotKit = "Co-pilot Kit"
+    case exa = "EXA"
+
+    var id: String { rawValue }
+
+    var url: URL {
+        switch self {
+        case .slack: return URL(string: "https://app.slack.com/client")!
+        case .googleWorkspace: return URL(string: "https://workspace.google.com")!
+        case .microsoftOffice: return URL(string: "https://www.office.com")!
+        case .news: return URL(string: "https://news.google.com")!
+        case .localWeather: return URL(string: "https://www.google.com/search?q=weather+near+me")!
+        case .openAI: return URL(string: "https://chatgpt.com")!
+        case .openRouter: return URL(string: "https://openrouter.ai")!
+        case .vds: return URL(string: "https://www.google.com/search?q=VDS+hosting")!
+        case .copilotKit: return URL(string: "https://copilotkit.ai")!
+        case .exa: return URL(string: "https://exa.ai")!
+        }
+    }
+}
+
 struct BrowserScreen: View {
     @State private var address = "https://www.apple.com"
     @State private var userName = BuildInfo.user
@@ -127,6 +157,17 @@ struct BrowserScreen: View {
 
                 Button("Open", action: openAddress)
                     .keyboardShortcut(.return, modifiers: .command)
+
+                Menu {
+                    ForEach(BrowserService.allCases) { service in
+                        Button(service.rawValue) {
+                            openInBrowser(service.url)
+                        }
+                    }
+                } label: {
+                    Label("Services", systemImage: "square.grid.2x2")
+                }
+                .help("Open a connected service in this browser pane")
             }
 
             HStack(spacing: 10) {
