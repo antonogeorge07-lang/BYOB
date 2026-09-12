@@ -154,7 +154,7 @@ struct BrowserScreen: View {
             Label("New feature requirements", systemImage: "lightbulb")
                 .font(.headline)
 
-            Text("Enter your name above, describe the feature here, and Submit will create an issue in this repository.")
+            Text("Enter your name above, describe the feature here, then select Submit to get it implemented.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
