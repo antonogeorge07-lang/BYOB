@@ -1,6 +1,6 @@
 # BYOB
 
-BYOB is a minimal native macOS browser window that you can customize for yourself, by yourself, with Codex working behind the scenes. Use the built-in requirements pane to describe a feature; Codex can turn that request into a GitHub Issue and implement it through the repository workflow.
+BYOB stands for **Build Your Own Browser**. It is a minimal native macOS browser window that you can customize for yourself, by yourself, with Codex working behind the scenes. Use the built-in requirements pane to describe a feature; Codex can turn that request into a GitHub Issue and implement it through the repository workflow.
 
 The project relies on GitHub functionality including Issues, Actions, and Releases. To use the customization flow, you need access to the GitHub repository and the command-line GitHub tool (`gh`) authorized to access GitHub on your Mac.
 
