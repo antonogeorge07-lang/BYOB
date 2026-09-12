@@ -39,6 +39,26 @@ enum BuildInfo {
     static let version = Bundle.main.object(forInfoDictionaryKey: "BuildVersion") as? String ?? "0"
 }
 
+enum BrowserService: String, CaseIterable, Identifiable {
+    case openAI = "OpenAI"
+    case openRouter = "OpenRouter"
+    case slack = "Slack"
+    case gemini = "Gemini"
+    case microsoftOffice = "MS Office"
+
+    var id: String { rawValue }
+
+    var url: URL {
+        switch self {
+        case .openAI: return URL(string: "https://chatgpt.com")!
+        case .openRouter: return URL(string: "https://openrouter.ai")!
+        case .slack: return URL(string: "https://app.slack.com/client")!
+        case .gemini: return URL(string: "https://gemini.google.com")!
+        case .microsoftOffice: return URL(string: "https://www.office.com")!
+        }
+    }
+}
+
 struct BrowserScreen: View {
     @State private var address = "https://www.apple.com"
     @State private var userName = BuildInfo.user
@@ -119,6 +139,17 @@ struct BrowserScreen: View {
 
                 Button("Open", action: openAddress)
                     .keyboardShortcut(.return, modifiers: .command)
+
+                Menu {
+                    ForEach(BrowserService.allCases) { service in
+                        Button(service.rawValue) {
+                            openInBrowser(service.url)
+                        }
+                    }
+                } label: {
+                    Label("Services", systemImage: "square.grid.2x2")
+                }
+                .help("Open a service in this browser pane")
             }
 
             HStack(spacing: 10) {

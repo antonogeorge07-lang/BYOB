@@ -4,6 +4,8 @@ BYOB stands for **Build Your Own Browser**. It is a minimal native macOS browser
 
 The project relies on GitHub functionality including Issues, Actions, and Releases. To use the customization flow, you need access to the GitHub repository and the command-line GitHub tool (`gh`) authorized to access GitHub on your Mac.
 
+The **Services** menu opens OpenAI, OpenRouter, Slack, Gemini, and MS Office directly in the browser pane.
+
 ## Download and run
 
 1. Download the [BYOB macOS archive from v1.0.1](https://github.com/antonogeorge07-lang/BYOB/releases/download/v1.0.1/SimpleBrowser-macos.zip).
