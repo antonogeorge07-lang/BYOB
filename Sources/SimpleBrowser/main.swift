@@ -58,7 +58,9 @@ struct BrowserScreen: View {
 
             HSplitView {
                 ZStack {
-                    BrowserWebView(url: loadedURL)
+                    BrowserWebView(url: loadedURL) { downloadStatus in
+                        submissionStatus = downloadStatus
+                    }
 
                     if let loadError {
                         VStack(spacing: 10) {
@@ -382,6 +384,11 @@ enum GitHubReleaseService {
 
 struct BrowserWebView: NSViewRepresentable {
     let url: URL
+    let onDownloadStatus: (String) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onDownloadStatus: onDownloadStatus)
+    }
 
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
@@ -389,13 +396,105 @@ struct BrowserWebView: NSViewRepresentable {
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
+        webView.navigationDelegate = context.coordinator
         webView.load(URLRequest(url: url))
         return webView
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
+        context.coordinator.onDownloadStatus = onDownloadStatus
         guard webView.url != url else { return }
         webView.load(URLRequest(url: url))
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKDownloadDelegate {
+        var onDownloadStatus: (String) -> Void
+        private var destinations: [ObjectIdentifier: URL] = [:]
+
+        init(onDownloadStatus: @escaping (String) -> Void) {
+            self.onDownloadStatus = onDownloadStatus
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationResponse: WKNavigationResponse,
+            decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+        ) {
+            decisionHandler(navigationResponse.canShowMIMEType ? .allow : .download)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            navigationResponse: WKNavigationResponse,
+            didBecome download: WKDownload
+        ) {
+            prepare(download)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            navigationAction: WKNavigationAction,
+            didBecome download: WKDownload
+        ) {
+            prepare(download)
+        }
+
+        func download(
+            _ download: WKDownload,
+            decideDestinationUsing response: URLResponse,
+            suggestedFilename: String,
+            completionHandler: @escaping (URL?) -> Void
+        ) {
+            let destination = uniqueDownloadsURL(for: suggestedFilename)
+            destinations[ObjectIdentifier(download)] = destination
+            report("Downloading \(suggestedFilename)…")
+            completionHandler(destination)
+        }
+
+        func downloadDidFinish(_ download: WKDownload) {
+            let destination = destinations.removeValue(forKey: ObjectIdentifier(download))
+            let fileName = destination?.lastPathComponent ?? "file"
+            report("Downloaded \(fileName) to your Downloads folder.")
+        }
+
+        func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+            destinations.removeValue(forKey: ObjectIdentifier(download))
+            report("Download failed: \(error.localizedDescription)")
+        }
+
+        private func prepare(_ download: WKDownload) {
+            download.delegate = self
+            report("Preparing download…")
+        }
+
+        private func uniqueDownloadsURL(for filename: String) -> URL {
+            let fileManager = FileManager.default
+            let downloadsDirectory = fileManager.urls(for: .downloadsDirectory, in: .userDomainMask).first
+                ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Downloads")
+            let originalURL = downloadsDirectory.appendingPathComponent(filename)
+
+            guard fileManager.fileExists(atPath: originalURL.path) else { return originalURL }
+
+            let baseName = originalURL.deletingPathExtension().lastPathComponent
+            let fileExtension = originalURL.pathExtension
+            var copyIndex = 2
+            var candidate = originalURL
+
+            while fileManager.fileExists(atPath: candidate.path) {
+                let copyName = "\(baseName) \(copyIndex)"
+                candidate = downloadsDirectory
+                    .appendingPathComponent(copyName)
+                    .appendingPathExtension(fileExtension)
+                copyIndex += 1
+            }
+            return candidate
+        }
+
+        private func report(_ message: String) {
+            DispatchQueue.main.async {
+                self.onDownloadStatus(message)
+            }
+        }
     }
 }
 

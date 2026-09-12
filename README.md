@@ -20,6 +20,8 @@ The packaged app's **About Simple Browser** menu item shows the release user and
 
 The app also checks GitHub for newer releases for the embedded user every five minutes, and the **Check updates** button beside the name field runs the check immediately. For a local development build, enter a name and it checks releases for that name. When it finds one, it displays an update link in the requirements submission-status area.
 
+Downloads started from a rendered web page are saved to the Mac's Downloads folder. Their status appears in the requirements submission-status area.
+
 ## License
 
 Licensed under the [MIT License](LICENSE). You may use, modify, and redistribute this software, including commercially, provided you retain the copyright and license notices.
