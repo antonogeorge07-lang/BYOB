@@ -1,0 +1,54 @@
+name: Build macOS release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create (for example, v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: macos-14
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Build release executable
+        run: swift build -c release
+
+      - name: Package the macOS app
+        run: |
+          APP_NAME="Simple Browser.app"
+          APP_PATH="release/${APP_NAME}"
+          mkdir -p "${APP_PATH}/Contents/MacOS"
+          cp AppBundle/Info.plist "${APP_PATH}/Contents/Info.plist"
+          cp .build/arm64-apple-macosx/release/SimpleBrowser "${APP_PATH}/Contents/MacOS/SimpleBrowser"
+          codesign --force --deep --sign - "${APP_PATH}"
+          ditto -c -k --sequesterRsrc --keepParent "${APP_PATH}" SimpleBrowser-macos.zip
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            gh release create "${RELEASE_TAG}" SimpleBrowser-macos.zip \
+              --target "${GITHUB_SHA}" \
+              --title "Simple Browser ${RELEASE_TAG}" \
+              --generate-notes
+          else
+            gh release create "${RELEASE_TAG}" SimpleBrowser-macos.zip \
+              --title "Simple Browser ${RELEASE_TAG}" \
+              --generate-notes
+          fi

@@ -11,3 +11,7 @@ swift run
 ```
 
 The app accepts `http` and `https` addresses. If a scheme is omitted, it uses `https` automatically.
+
+## Downloadable releases
+
+Push a version tag such as `v1.0.0`, or run the **Build macOS release** workflow manually from GitHub's Actions page. The workflow builds an Apple Silicon macOS app and attaches `SimpleBrowser-macos.zip` to the resulting GitHub Release.
