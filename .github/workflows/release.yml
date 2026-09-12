@@ -57,9 +57,9 @@ jobs:
             USER_SLUG="$(echo "${USER_NAME}" | tr '/' '-')"
             git fetch origin main
             VERSION="$(git rev-list --count origin/main..HEAD)"
-            BUILD_TAG="${USER_SLUG}-v${VERSION}-${GITHUB_SHA:0:7}"
+            BUILD_TAG="${USER_SLUG}-${VERSION}-${GITHUB_SHA:0:7}"
             gh release create "${BUILD_TAG}" SimpleBrowser-macos.zip \
-              --title "Simple Browser — ${USER_NAME} v${VERSION}" \
+              --title "Simple Browser — ${USER_NAME}-${VERSION}" \
               --notes "Automated build for ${USER_NAME}, version ${VERSION} (commits ahead of main), at commit \`${GITHUB_SHA}\`." \
               --prerelease
           else
