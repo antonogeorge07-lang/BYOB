@@ -14,4 +14,4 @@ The app accepts `http` and `https` addresses. If a scheme is omitted, it uses `h
 
 ## Downloadable releases
 
-Push a version tag such as `v1.0.0`, push to any branch named `user/...`, or run the **Build macOS release** workflow manually from GitHub's Actions page. The workflow builds an Apple Silicon macOS app and attaches `SimpleBrowser-macos.zip` to a GitHub Release. Builds from `user/...` branches are marked as prereleases and each receive a unique build tag.
+Push a version tag such as `v1.0.0`, push to any branch named `user/...`, or run the **Build macOS release** workflow manually from GitHub's Actions page. The workflow builds an Apple Silicon macOS app and attaches `SimpleBrowser-macos.zip` to a GitHub Release. Builds from `user/...` branches are prereleases named after the user (the part after `user/`) and their version number is the number of commits ahead of `main`.

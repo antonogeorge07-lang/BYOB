@@ -24,6 +24,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Build release executable
         run: swift build -c release
@@ -51,11 +53,14 @@ jobs:
               --title "Simple Browser ${{ inputs.tag }}" \
               --generate-notes
           elif [ "${REF_TYPE}" = "branch" ]; then
-            BRANCH_SLUG="$(echo "${REF_NAME}" | tr '/' '-')"
-            BUILD_TAG="build-${BRANCH_SLUG}-${GITHUB_SHA:0:7}"
+            USER_NAME="${REF_NAME#user/}"
+            USER_SLUG="$(echo "${USER_NAME}" | tr '/' '-')"
+            git fetch origin main
+            VERSION="$(git rev-list --count origin/main..HEAD)"
+            BUILD_TAG="${USER_SLUG}-v${VERSION}-${GITHUB_SHA:0:7}"
             gh release create "${BUILD_TAG}" SimpleBrowser-macos.zip \
-              --title "Simple Browser build: ${REF_NAME}" \
-              --notes "Automated build from branch \`${REF_NAME}\` at commit \`${GITHUB_SHA}\`." \
+              --title "Simple Browser — ${USER_NAME} v${VERSION}" \
+              --notes "Automated build for ${USER_NAME}, version ${VERSION} (commits ahead of main), at commit \`${GITHUB_SHA}\`." \
               --prerelease
           else
             gh release create "${REF_NAME}" SimpleBrowser-macos.zip \
