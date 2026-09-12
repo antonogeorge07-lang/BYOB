@@ -8,6 +8,7 @@ let package = Package(
         .executable(name: "SimpleBrowser", targets: ["SimpleBrowser"])
     ],
     targets: [
-        .executableTarget(name: "SimpleBrowser")
+        .executableTarget(name: "SimpleBrowser"),
+        .testTarget(name: "SimpleBrowserTests", dependencies: ["SimpleBrowser"])
     ]
 )

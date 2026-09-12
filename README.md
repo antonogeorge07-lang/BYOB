@@ -23,6 +23,10 @@ Then add a comment to the issue explaining in details what was done.
 
 Finally, mark the issue as closed.
 
+## Page context boundary
+
+After each rendered page finishes loading, the app extracts the current URL, title, up to 6,000 characters of visible text, and up to 40 visible interactive elements into Swift-only `PageContext` data. No context is stored or displayed. Run `swift test` to verify the JavaScript-to-Swift parsing boundary.
+
 ## License
 
 Licensed under the [MIT License](LICENSE). You may use, modify, and redistribute this software, including commercially, provided you retain the copyright and license notices.

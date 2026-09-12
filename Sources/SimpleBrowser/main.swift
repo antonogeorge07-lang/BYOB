@@ -54,6 +54,7 @@ struct BrowserScreen: View {
     @State private var isSwitchingToUpdate = false
     @State private var isUpdatePromptPresented = false
     @State private var loadError: String?
+    @State private var currentPageContext: PageContext?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -65,9 +66,16 @@ struct BrowserScreen: View {
 
             HSplitView {
                 ZStack {
-                    BrowserWebView(url: loadedURL, requestID: navigationRequestID) { downloadStatus in
-                        submissionStatus = downloadStatus
-                    }
+                    BrowserWebView(
+                        url: loadedURL,
+                        requestID: navigationRequestID,
+                        onDownloadStatus: { downloadStatus in
+                            submissionStatus = downloadStatus
+                        },
+                        onPageContext: { pageContext in
+                            currentPageContext = pageContext
+                        }
+                    )
 
                     if let loadError {
                         VStack(spacing: 10) {
@@ -586,13 +594,78 @@ enum UpdateHandoff {
     }
 }
 
+struct PageContext: Equatable {
+    let url: URL
+    let title: String
+    let visibleText: String
+    let interactiveElements: [InteractiveElement]
+}
+
+struct InteractiveElement: Equatable {
+    let tag: String
+    let label: String
+    let href: String?
+    let type: String?
+}
+
+enum PageContextExtractor {
+    static let script = """
+    (() => {
+      const textLimit = 6000;
+      const elementLimit = 40;
+      const visible = element => {
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+      };
+      const labelFor = element =>
+        element.getAttribute('aria-label') || element.innerText || element.value || element.placeholder || element.title || '';
+      const elements = Array.from(document.querySelectorAll('a, button, input, textarea, select, [role="button"], [contenteditable="true"]'))
+        .filter(visible)
+        .slice(0, elementLimit)
+        .map(element => ({
+          tag: element.tagName.toLowerCase(),
+          label: labelFor(element).trim().replace(/\\s+/g, ' ').slice(0, 200),
+          href: element.href || null,
+          type: element.type || null
+        }));
+      return {
+        url: window.location.href,
+        title: document.title || '',
+        visibleText: (document.body?.innerText || '').trim().replace(/\\s+/g, ' ').slice(0, textLimit),
+        interactiveElements: elements
+      };
+    })();
+    """
+
+    static func parse(_ value: Any, fallbackURL: URL) -> PageContext? {
+        guard let dictionary = value as? [String: Any] else { return nil }
+
+        let url = (dictionary["url"] as? String).flatMap(URL.init(string:)) ?? fallbackURL
+        let title = dictionary["title"] as? String ?? ""
+        let visibleText = dictionary["visibleText"] as? String ?? ""
+        let elements = (dictionary["interactiveElements"] as? [[String: Any]] ?? []).compactMap { element -> InteractiveElement? in
+            guard let tag = element["tag"] as? String else { return nil }
+            return InteractiveElement(
+                tag: tag,
+                label: element["label"] as? String ?? "",
+                href: element["href"] as? String,
+                type: element["type"] as? String
+            )
+        }
+
+        return PageContext(url: url, title: title, visibleText: visibleText, interactiveElements: elements)
+    }
+}
+
 struct BrowserWebView: NSViewRepresentable {
     let url: URL
     let requestID: Int
     let onDownloadStatus: (String) -> Void
+    let onPageContext: (PageContext) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onDownloadStatus: onDownloadStatus)
+        Coordinator(onDownloadStatus: onDownloadStatus, onPageContext: onPageContext)
     }
 
     func makeNSView(context: Context) -> WKWebView {
@@ -609,6 +682,7 @@ struct BrowserWebView: NSViewRepresentable {
 
     func updateNSView(_ webView: WKWebView, context: Context) {
         context.coordinator.onDownloadStatus = onDownloadStatus
+        context.coordinator.onPageContext = onPageContext
         guard context.coordinator.requestID != requestID else { return }
         context.coordinator.requestID = requestID
         webView.load(URLRequest(url: url))
@@ -616,11 +690,23 @@ struct BrowserWebView: NSViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKDownloadDelegate {
         var onDownloadStatus: (String) -> Void
+        var onPageContext: (PageContext) -> Void
         var requestID = -1
         private var destinations: [ObjectIdentifier: URL] = [:]
 
-        init(onDownloadStatus: @escaping (String) -> Void) {
+        init(onDownloadStatus: @escaping (String) -> Void, onPageContext: @escaping (PageContext) -> Void) {
             self.onDownloadStatus = onDownloadStatus
+            self.onPageContext = onPageContext
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            guard let pageURL = webView.url else { return }
+            webView.evaluateJavaScript(PageContextExtractor.script) { [weak self] value, _ in
+                guard let context = PageContextExtractor.parse(value as Any, fallbackURL: pageURL) else { return }
+                DispatchQueue.main.async {
+                    self?.onPageContext(context)
+                }
+            }
         }
 
         func webView(
