@@ -2,6 +2,7 @@ import SwiftUI
 import WebKit
 import AppKit
 import Foundation
+import Darwin
 
 @main
 struct SimpleBrowserApp: App {
@@ -10,6 +11,7 @@ struct SimpleBrowserApp: App {
         // active application, ready to receive keyboard input.
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
+            UpdateHandoff.removeOldAppAfterPreviousInstanceExitsIfRequested()
         }
     }
 
@@ -39,13 +41,17 @@ enum BuildInfo {
 
 struct BrowserScreen: View {
     @State private var address = "https://www.apple.com"
-    @State private var userName = ""
+    @State private var userName = BuildInfo.user
     @State private var requirements = ""
     @State private var loadedURL = URL(string: "https://www.apple.com")!
     @State private var submissionStatus = ""
     @State private var availableRelease: GitHubRelease?
+    @State private var downloadedUpdate: DownloadedUpdate?
     @State private var isSubmitting = false
     @State private var isCheckingReleases = false
+    @State private var isDownloadingUpdate = false
+    @State private var isSwitchingToUpdate = false
+    @State private var isUpdatePromptPresented = false
     @State private var loadError: String?
 
     var body: some View {
@@ -88,6 +94,14 @@ struct BrowserScreen: View {
         .task {
             await watchForReleaseUpdates()
         }
+        .alert("Update ready", isPresented: $isUpdatePromptPresented) {
+            Button("Switch now") {
+                switchToDownloadedUpdate()
+            }
+            Button("Not now", role: .cancel) { }
+        } message: {
+            Text("\(downloadedUpdate?.release.name ?? "The new version") has downloaded. Would you like to switch to it now?")
+        }
     }
 
     private var header: some View {
@@ -122,6 +136,14 @@ struct BrowserScreen: View {
                 }
                 .disabled(isCheckingReleases)
                 .help("Check GitHub for a newer release for this app user")
+
+                if downloadedUpdate != nil {
+                    Button(isSwitchingToUpdate ? "Switching…" : "Update now") {
+                        switchToDownloadedUpdate()
+                    }
+                    .disabled(isSwitchingToUpdate)
+                    .help("Switch to the downloaded version")
+                }
             }
         }
     }
@@ -258,7 +280,7 @@ struct BrowserScreen: View {
         do {
             let releases = try await GitHubReleaseService.fetchReleases()
             let releasePrefix = "Simple Browser — \(releaseUser)-"
-            availableRelease = releases
+            let newerRelease = releases
                 .compactMap { release -> (GitHubRelease, Int)? in
                     guard release.name.hasPrefix(releasePrefix),
                           let version = Int(release.name.dropFirst(releasePrefix.count)),
@@ -269,8 +291,57 @@ struct BrowserScreen: View {
                 }
                 .max { $0.1 < $1.1 }?
                 .0
+
+            availableRelease = newerRelease
+
+            guard let newerRelease,
+                  downloadedUpdate?.release.tagName != newerRelease.tagName,
+                  !isDownloadingUpdate else {
+                return
+            }
+
+            await downloadUpdate(newerRelease)
         } catch {
             // A missed network check should not interrupt browsing or issue submission.
+        }
+    }
+
+    private func downloadUpdate(_ release: GitHubRelease) async {
+        isDownloadingUpdate = true
+        submissionStatus = "Downloading \(release.name) in the background…"
+        defer { isDownloadingUpdate = false }
+
+        do {
+            let archiveURL = try await AppUpdateService.downloadArchive(for: release)
+            downloadedUpdate = DownloadedUpdate(release: release, archiveURL: archiveURL)
+            submissionStatus = "\(release.name) has downloaded and is ready to install."
+            isUpdatePromptPresented = true
+        } catch {
+            submissionStatus = "Couldn’t download \(release.name): \(error.localizedDescription)"
+        }
+    }
+
+    private func switchToDownloadedUpdate() {
+        guard let downloadedUpdate else { return }
+
+        isSwitchingToUpdate = true
+        submissionStatus = "Preparing the new version…"
+
+        Task {
+            do {
+                let newAppURL = try await AppUpdateService.extractApp(from: downloadedUpdate.archiveURL)
+                try AppUpdateService.launchReplacement(
+                    appURL: newAppURL,
+                    oldAppURL: Bundle.main.bundleURL,
+                    oldProcessID: ProcessInfo.processInfo.processIdentifier
+                )
+                await MainActor.run {
+                    NSApp.terminate(nil)
+                }
+            } catch {
+                isSwitchingToUpdate = false
+                submissionStatus = "Couldn’t switch to the new version: \(error.localizedDescription)"
+            }
         }
     }
 }
@@ -349,16 +420,41 @@ enum GitHubIssueService {
 
 struct GitHubRelease: Decodable {
     let name: String
+    let tagName: String
     let htmlURL: String
+    let assets: [GitHubReleaseAsset]
 
     var url: URL {
         URL(string: htmlURL)!
     }
 
+    var appArchiveURL: URL? {
+        let asset = assets.first { $0.name == "SimpleBrowser-macos.zip" }
+            ?? assets.first { $0.name.hasSuffix(".zip") }
+        return asset.flatMap { URL(string: $0.browserDownloadURL) }
+    }
+
     enum CodingKeys: String, CodingKey {
         case name
+        case tagName = "tag_name"
         case htmlURL = "html_url"
+        case assets
     }
+}
+
+struct GitHubReleaseAsset: Decodable {
+    let name: String
+    let browserDownloadURL: String
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case browserDownloadURL = "browser_download_url"
+    }
+}
+
+struct DownloadedUpdate {
+    let release: GitHubRelease
+    let archiveURL: URL
 }
 
 enum GitHubReleaseService {
@@ -379,6 +475,111 @@ enum GitHubReleaseService {
 
     private enum ReleaseLookupError: Error {
         case unavailable
+    }
+}
+
+enum AppUpdateService {
+    static func downloadArchive(for release: GitHubRelease) async throws -> URL {
+        guard let archiveURL = release.appArchiveURL else {
+            throw UpdateError.missingArchive
+        }
+
+        let (temporaryURL, response) = try await URLSession.shared.download(from: archiveURL)
+        guard let httpResponse = response as? HTTPURLResponse,
+              200..<300 ~= httpResponse.statusCode else {
+            throw UpdateError.downloadFailed
+        }
+
+        let updatesDirectory = try updateStorageDirectory()
+        let destination = updatesDirectory.appendingPathComponent("update-\(UUID().uuidString).zip")
+        try FileManager.default.moveItem(at: temporaryURL, to: destination)
+        return destination
+    }
+
+    static func extractApp(from archiveURL: URL) async throws -> URL {
+        try await Task.detached(priority: .userInitiated) {
+            let destination = try updateStorageDirectory()
+                .appendingPathComponent("app-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+
+            let extraction = Process()
+            extraction.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+            extraction.arguments = ["-x", "-k", archiveURL.path, destination.path]
+            try extraction.run()
+            extraction.waitUntilExit()
+
+            guard extraction.terminationStatus == 0 else {
+                throw UpdateError.extractionFailed
+            }
+
+            let appURL = destination.appendingPathComponent("Simple Browser.app", isDirectory: true)
+            guard FileManager.default.fileExists(atPath: appURL.path) else {
+                throw UpdateError.extractionFailed
+            }
+            return appURL
+        }.value
+    }
+
+    static func launchReplacement(appURL: URL, oldAppURL: URL, oldProcessID: Int32) throws {
+        let executableURL = appURL.appendingPathComponent("Contents/MacOS/SimpleBrowser")
+        guard FileManager.default.isExecutableFile(atPath: executableURL.path) else {
+            throw UpdateError.extractionFailed
+        }
+
+        let replacement = Process()
+        replacement.executableURL = executableURL
+        replacement.arguments = [
+            "--trash-old-app", oldAppURL.path,
+            "--old-process-id", String(oldProcessID)
+        ]
+        try replacement.run()
+    }
+
+    private static func updateStorageDirectory() throws -> URL {
+        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("SimpleBrowser/Updates", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    private enum UpdateError: LocalizedError {
+        case missingArchive
+        case downloadFailed
+        case extractionFailed
+
+        var errorDescription: String? {
+            switch self {
+            case .missingArchive: return "The release has no macOS ZIP archive."
+            case .downloadFailed: return "The release download failed."
+            case .extractionFailed: return "The downloaded app could not be prepared."
+            }
+        }
+    }
+}
+
+enum UpdateHandoff {
+    static func removeOldAppAfterPreviousInstanceExitsIfRequested() {
+        let arguments = CommandLine.arguments
+        guard let appIndex = arguments.firstIndex(of: "--trash-old-app"),
+              let pidIndex = arguments.firstIndex(of: "--old-process-id"),
+              arguments.indices.contains(appIndex + 1),
+              arguments.indices.contains(pidIndex + 1),
+              let oldProcessID = Int32(arguments[pidIndex + 1]) else {
+            return
+        }
+
+        let oldAppURL = URL(fileURLWithPath: arguments[appIndex + 1])
+        guard oldAppURL.pathExtension == "app", oldAppURL != Bundle.main.bundleURL else { return }
+
+        DispatchQueue.global(qos: .utility).async {
+            for _ in 0..<240 {
+                if kill(oldProcessID, 0) == -1, errno == ESRCH {
+                    try? FileManager.default.trashItem(at: oldAppURL, resultingItemURL: nil)
+                    return
+                }
+                usleep(250_000)
+            }
+        }
     }
 }
 

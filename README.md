@@ -18,7 +18,9 @@ Push a version tag such as `v1.0.0`, push to any branch named `user/...`, or run
 
 The packaged app's **About Simple Browser** menu item shows the release user and version. Those values are embedded when GitHub Actions builds the release.
 
-The app also checks GitHub for newer releases for the embedded user every five minutes, and the **Check updates** button beside the name field runs the check immediately. For a local development build, enter a name and it checks releases for that name. When it finds one, it displays an update link in the requirements submission-status area.
+The name field starts with the user embedded in the current app release. The app checks GitHub for newer releases for that user every five minutes, and the **Check updates** button beside the name field runs the check immediately. For a local development build, enter a name and it checks releases for that name.
+
+When a newer release is found, the app downloads its ZIP archive in the background and asks whether to switch once it is ready. Choosing **Not now** leaves an **Update now** button beside **Check updates**. Choosing either switch action launches the new app, closes the old instance, and the new instance moves the old app bundle to the Trash after the previous process exits.
 
 Downloads started from a rendered web page are saved to the Mac's Downloads folder. Their status appears in the requirements submission-status area.
 
