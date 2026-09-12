@@ -2,6 +2,8 @@
 
 A minimal native macOS browser window with an address field, name field, embedded web page, and a feature-requirements pane. Submitting a requirement opens a GitHub issue in `antonogeorge07-lang/BYOB` using the signed-in GitHub CLI account on the Mac.
 
+Open pages in separate tabs with the **+** button. The address line always follows the selected tab; control-click a tab to close it.
+
 ## Run
 
 Open this folder in Xcode and run the `SimpleBrowser` executable target, or run:

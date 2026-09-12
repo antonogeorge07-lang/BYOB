@@ -39,6 +39,19 @@ enum BuildInfo {
     static let version = Bundle.main.object(forInfoDictionaryKey: "BuildVersion") as? String ?? "0"
 }
 
+struct BrowserTab: Identifiable {
+    let id = UUID()
+    var url: URL
+    var address: String
+    var title: String
+
+    init(url: URL, title: String = "New tab") {
+        self.url = url
+        self.address = url.absoluteString
+        self.title = title
+    }
+}
+
 struct BrowserScreen: View {
     @State private var address = "https://www.apple.com"
     @State private var userName = BuildInfo.user
@@ -54,6 +67,14 @@ struct BrowserScreen: View {
     @State private var isSwitchingToUpdate = false
     @State private var isUpdatePromptPresented = false
     @State private var loadError: String?
+    @State private var tabs: [BrowserTab]
+    @State private var selectedTabID: UUID
+
+    init() {
+        let firstTab = BrowserTab(url: URL(string: "https://www.apple.com")!, title: "Apple")
+        _tabs = State(initialValue: [firstTab])
+        _selectedTabID = State(initialValue: firstTab.id)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -65,9 +86,16 @@ struct BrowserScreen: View {
 
             HSplitView {
                 ZStack {
-                    BrowserWebView(url: loadedURL, requestID: navigationRequestID) { downloadStatus in
-                        submissionStatus = downloadStatus
-                    }
+                    BrowserWebView(
+                        url: loadedURL,
+                        requestID: navigationRequestID,
+                        onDownloadStatus: { downloadStatus in
+                            submissionStatus = downloadStatus
+                        },
+                        onPageNavigation: { pageURL, pageTitle in
+                            updateSelectedTab(url: pageURL, title: pageTitle)
+                        }
+                    )
 
                     if let loadError {
                         VStack(spacing: 10) {
@@ -107,6 +135,8 @@ struct BrowserScreen: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
+            tabBar
+
             HStack(spacing: 10) {
                 Image(systemName: "globe")
                     .foregroundStyle(.tint)
@@ -145,6 +175,34 @@ struct BrowserScreen: View {
                     .disabled(isSwitchingToUpdate)
                     .help("Switch to the downloaded version")
                 }
+            }
+        }
+    }
+
+    private var tabBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(tabs) { tab in
+                    Button(action: { select(tab) }) {
+                        Text(tab.title)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: 150)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(tab.id == selectedTabID ? .accentColor : .gray)
+                    .contextMenu {
+                        Button("Close tab") {
+                            close(tab)
+                        }
+                        .disabled(tabs.count == 1)
+                    }
+                }
+
+                Button(action: addTab) {
+                    Image(systemName: "plus")
+                }
+                .help("Open a new tab")
             }
         }
     }
@@ -225,6 +283,7 @@ struct BrowserScreen: View {
         loadError = nil
         loadedURL = url
         navigationRequestID += 1
+        updateSelectedTab(url: url, title: url.host ?? url.absoluteString)
     }
 
     private func openInBrowser(_ url: URL) {
@@ -232,6 +291,40 @@ struct BrowserScreen: View {
         loadError = nil
         loadedURL = url
         navigationRequestID += 1
+        updateSelectedTab(url: url, title: url.host ?? url.absoluteString)
+    }
+
+    private func addTab() {
+        let tab = BrowserTab(url: URL(string: "https://www.apple.com")!, title: "New tab")
+        tabs.append(tab)
+        select(tab)
+    }
+
+    private func select(_ tab: BrowserTab) {
+        selectedTabID = tab.id
+        address = tab.address
+        loadedURL = tab.url
+        loadError = nil
+        navigationRequestID += 1
+    }
+
+    private func close(_ tab: BrowserTab) {
+        guard tabs.count > 1, let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        tabs.remove(at: index)
+
+        if selectedTabID == tab.id {
+            select(tabs[min(index, tabs.count - 1)])
+        }
+    }
+
+    private func updateSelectedTab(url: URL, title: String?) {
+        guard let index = tabs.firstIndex(where: { $0.id == selectedTabID }) else { return }
+        tabs[index].url = url
+        tabs[index].address = url.absoluteString
+        tabs[index].title = title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? title!
+            : (url.host ?? url.absoluteString)
+        address = url.absoluteString
     }
 
     private func submitMessage() {
@@ -590,9 +683,10 @@ struct BrowserWebView: NSViewRepresentable {
     let url: URL
     let requestID: Int
     let onDownloadStatus: (String) -> Void
+    let onPageNavigation: (URL, String?) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onDownloadStatus: onDownloadStatus)
+        Coordinator(onDownloadStatus: onDownloadStatus, onPageNavigation: onPageNavigation)
     }
 
     func makeNSView(context: Context) -> WKWebView {
@@ -609,6 +703,7 @@ struct BrowserWebView: NSViewRepresentable {
 
     func updateNSView(_ webView: WKWebView, context: Context) {
         context.coordinator.onDownloadStatus = onDownloadStatus
+        context.coordinator.onPageNavigation = onPageNavigation
         guard context.coordinator.requestID != requestID else { return }
         context.coordinator.requestID = requestID
         webView.load(URLRequest(url: url))
@@ -616,11 +711,23 @@ struct BrowserWebView: NSViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKDownloadDelegate {
         var onDownloadStatus: (String) -> Void
+        var onPageNavigation: (URL, String?) -> Void
         var requestID = -1
         private var destinations: [ObjectIdentifier: URL] = [:]
 
-        init(onDownloadStatus: @escaping (String) -> Void) {
+        init(
+            onDownloadStatus: @escaping (String) -> Void,
+            onPageNavigation: @escaping (URL, String?) -> Void
+        ) {
             self.onDownloadStatus = onDownloadStatus
+            self.onPageNavigation = onPageNavigation
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            guard let pageURL = webView.url else { return }
+            DispatchQueue.main.async {
+                self.onPageNavigation(pageURL, webView.title)
+            }
         }
 
         func webView(
