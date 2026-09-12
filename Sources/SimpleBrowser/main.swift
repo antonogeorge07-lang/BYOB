@@ -114,11 +114,11 @@ struct BrowserScreen: View {
                 Button(isCheckingReleases ? "Checking…" : "Check updates") {
                     Task {
                         isCheckingReleases = true
-                        await checkForReleaseUpdate()
+                        await checkForReleaseUpdate(showMissingUserMessage: true)
                         isCheckingReleases = false
                     }
                 }
-                .disabled(isCheckingReleases || BuildInfo.user == "local")
+                .disabled(isCheckingReleases)
                 .help("Check GitHub for a newer release for this app user")
             }
         }
@@ -237,14 +237,25 @@ struct BrowserScreen: View {
         }
     }
 
-    private func checkForReleaseUpdate() async {
-        guard BuildInfo.user != "local", let currentVersion = Int(BuildInfo.version) else {
+    private func checkForReleaseUpdate(showMissingUserMessage: Bool = false) async {
+        let releaseUser = BuildInfo.user == "local"
+            ? userName.trimmingCharacters(in: .whitespacesAndNewlines)
+            : BuildInfo.user
+
+        guard !releaseUser.isEmpty else {
+            if showMissingUserMessage {
+                submissionStatus = "Enter your name to check release updates."
+            }
+            return
+        }
+
+        guard let currentVersion = Int(BuildInfo.version) else {
             return
         }
 
         do {
             let releases = try await GitHubReleaseService.fetchReleases()
-            let releasePrefix = "Simple Browser — \(BuildInfo.user)-"
+            let releasePrefix = "Simple Browser — \(releaseUser)-"
             availableRelease = releases
                 .compactMap { release -> (GitHubRelease, Int)? in
                     guard release.name.hasPrefix(releasePrefix),
