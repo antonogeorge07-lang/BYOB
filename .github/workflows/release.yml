@@ -2,6 +2,8 @@ name: Build macOS release
 
 on:
   push:
+    branches:
+      - "user/**"
     tags:
       - "v*"
   workflow_dispatch:
@@ -40,15 +42,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
-            gh release create "${RELEASE_TAG}" SimpleBrowser-macos.zip \
+            gh release create "${{ inputs.tag }}" SimpleBrowser-macos.zip \
               --target "${GITHUB_SHA}" \
-              --title "Simple Browser ${RELEASE_TAG}" \
+              --title "Simple Browser ${{ inputs.tag }}" \
               --generate-notes
+          elif [ "${REF_TYPE}" = "branch" ]; then
+            BRANCH_SLUG="$(echo "${REF_NAME}" | tr '/' '-')"
+            BUILD_TAG="build-${BRANCH_SLUG}-${GITHUB_SHA:0:7}"
+            gh release create "${BUILD_TAG}" SimpleBrowser-macos.zip \
+              --title "Simple Browser build: ${REF_NAME}" \
+              --notes "Automated build from branch \`${REF_NAME}\` at commit \`${GITHUB_SHA}\`." \
+              --prerelease
           else
-            gh release create "${RELEASE_TAG}" SimpleBrowser-macos.zip \
-              --title "Simple Browser ${RELEASE_TAG}" \
+            gh release create "${REF_NAME}" SimpleBrowser-macos.zip \
+              --title "Simple Browser ${REF_NAME}" \
               --generate-notes
           fi
