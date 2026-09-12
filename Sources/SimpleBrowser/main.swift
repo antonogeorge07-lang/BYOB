@@ -69,6 +69,44 @@ enum BrowserService: String, CaseIterable, Identifiable {
     }
 }
 
+struct BrowserTab: Codable, Identifiable {
+    let id: UUID
+    var url: URL
+    var address: String
+    var title: String
+
+    init(url: URL, title: String = "New tab") {
+        self.id = UUID()
+        self.url = url
+        self.address = url.absoluteString
+        self.title = title
+    }
+}
+
+private struct BrowserSession: Codable {
+    let tabs: [BrowserTab]
+    let selectedTabID: UUID
+}
+
+private enum BrowserSessionStore {
+    private static let key = "browser-session"
+
+    static func load() -> BrowserSession? {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let session = try? JSONDecoder().decode(BrowserSession.self, from: data),
+              session.tabs.contains(where: { $0.id == session.selectedTabID }) else {
+            return nil
+        }
+        return session
+    }
+
+    static func save(tabs: [BrowserTab], selectedTabID: UUID) {
+        let session = BrowserSession(tabs: tabs, selectedTabID: selectedTabID)
+        guard let data = try? JSONEncoder().encode(session) else { return }
+        UserDefaults.standard.set(data, forKey: key)
+    }
+}
+
 struct BrowserScreen: View {
     @State private var address = "https://www.apple.com"
     @State private var userName = BuildInfo.user
@@ -85,6 +123,22 @@ struct BrowserScreen: View {
     @State private var isUpdatePromptPresented = false
     @State private var loadError: String?
     @State private var currentPageContext: PageContext?
+    @State private var tabs: [BrowserTab]
+    @State private var selectedTabID: UUID
+
+    init() {
+        if let session = BrowserSessionStore.load(),
+           let selectedTab = session.tabs.first(where: { $0.id == session.selectedTabID }) {
+            _tabs = State(initialValue: session.tabs)
+            _selectedTabID = State(initialValue: selectedTab.id)
+            _address = State(initialValue: selectedTab.address)
+            _loadedURL = State(initialValue: selectedTab.url)
+        } else {
+            let firstTab = BrowserTab(url: URL(string: "https://www.apple.com")!, title: "Apple")
+            _tabs = State(initialValue: [firstTab])
+            _selectedTabID = State(initialValue: firstTab.id)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -104,6 +158,7 @@ struct BrowserScreen: View {
                         },
                         onPageContext: { pageContext in
                             currentPageContext = pageContext
+                            updateSelectedTab(url: pageContext.url, title: pageContext.title)
                         }
                     )
 
@@ -145,6 +200,8 @@ struct BrowserScreen: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
+            tabBar
+
             HStack(spacing: 10) {
                 Image(systemName: "globe")
                     .foregroundStyle(.tint)
@@ -198,6 +255,34 @@ struct BrowserScreen: View {
         }
     }
 
+    private var tabBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(tabs) { tab in
+                    Button(action: { select(tab) }) {
+                        Text(tab.title)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: 150)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(tab.id == selectedTabID ? .accentColor : .gray)
+                    .contextMenu {
+                        Button("Close tab") {
+                            close(tab)
+                        }
+                        .disabled(tabs.count == 1)
+                    }
+                }
+
+                Button(action: addTab) {
+                    Image(systemName: "plus")
+                }
+                .help("Open a new tab")
+            }
+        }
+    }
+
     private var submissionPane: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label("New feature requirements", systemImage: "lightbulb")
@@ -223,6 +308,7 @@ struct BrowserScreen: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .keyboardShortcut(.return, modifiers: .shift)
             .disabled(isSubmitting || userName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || requirements.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
             if !submissionStatus.isEmpty {
@@ -274,6 +360,7 @@ struct BrowserScreen: View {
         loadError = nil
         loadedURL = url
         navigationRequestID += 1
+        updateSelectedTab(url: url, title: url.host ?? url.absoluteString)
     }
 
     private func openInBrowser(_ url: URL) {
@@ -281,6 +368,48 @@ struct BrowserScreen: View {
         loadError = nil
         loadedURL = url
         navigationRequestID += 1
+        updateSelectedTab(url: url, title: url.host ?? url.absoluteString)
+    }
+
+    private func addTab() {
+        let tab = BrowserTab(url: URL(string: "https://www.apple.com")!, title: "New tab")
+        tabs.append(tab)
+        select(tab)
+    }
+
+    private func select(_ tab: BrowserTab) {
+        selectedTabID = tab.id
+        address = tab.address
+        loadedURL = tab.url
+        loadError = nil
+        navigationRequestID += 1
+        persistSession()
+    }
+
+    private func close(_ tab: BrowserTab) {
+        guard tabs.count > 1, let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        tabs.remove(at: index)
+
+        if selectedTabID == tab.id {
+            select(tabs[min(index, tabs.count - 1)])
+        } else {
+            persistSession()
+        }
+    }
+
+    private func updateSelectedTab(url: URL, title: String?) {
+        guard let index = tabs.firstIndex(where: { $0.id == selectedTabID }) else { return }
+        tabs[index].url = url
+        tabs[index].address = url.absoluteString
+        tabs[index].title = title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? title!
+            : (url.host ?? url.absoluteString)
+        address = url.absoluteString
+        persistSession()
+    }
+
+    private func persistSession() {
+        BrowserSessionStore.save(tabs: tabs, selectedTabID: selectedTabID)
     }
 
     private func submitMessage() {

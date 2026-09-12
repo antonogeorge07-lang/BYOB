@@ -6,6 +6,8 @@ The project relies on GitHub functionality including Issues, Actions, and Releas
 
 The **Services** menu opens Slack, Google Workspace, MS Office, News, Local Weather, OpenAI, OpenRouter, VDS hosting search, Co-pilot Kit, and EXA directly in the browser pane.
 
+Use the **+** button to open additional tabs. The selected tab controls the URL line, and the open tabs and their current pages are restored after restarting or switching to an update. Control-click a tab to close it. Press **Shift–Return** to submit a feature request.
+
 ## Download and run
 
 1. Download [SimpleBrowser-macos.zip from v1.0.1](https://github.com/antonogeorge07-lang/BYOB/releases/download/v1.0.1/SimpleBrowser-macos.zip).
