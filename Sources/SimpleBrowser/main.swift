@@ -41,22 +41,18 @@ enum BuildInfo {
 
 enum BrowserService: String, CaseIterable, Identifiable {
     case openAI = "OpenAI"
-    case openRouter = "OpenRouter"
     case vds = "VDS"
     case copilotKit = "Co-pilot Kit"
     case exa = "EXA"
-    case microsoftOffice = "MS Office"
 
     var id: String { rawValue }
 
     var url: URL {
         switch self {
         case .openAI: return URL(string: "https://chatgpt.com")!
-        case .openRouter: return URL(string: "https://openrouter.ai")!
         case .vds: return URL(string: "https://www.google.com/search?q=VDS+hosting")!
         case .copilotKit: return URL(string: "https://copilotkit.ai")!
         case .exa: return URL(string: "https://exa.ai")!
-        case .microsoftOffice: return URL(string: "https://www.office.com")!
         }
     }
 }
