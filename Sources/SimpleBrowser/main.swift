@@ -56,8 +56,7 @@ struct BrowserScreen: View {
     @State private var address = "https://www.apple.com"
     @State private var userName = BuildInfo.user
     @State private var requirements = ""
-    @State private var loadedURL = URL(string: "https://www.apple.com")!
-    @State private var navigationRequestID = 0
+    @State private var navigationRequestIDs: [UUID: Int] = [:]
     @State private var submissionStatus = ""
     @State private var availableRelease: GitHubRelease?
     @State private var downloadedUpdate: DownloadedUpdate?
@@ -86,16 +85,24 @@ struct BrowserScreen: View {
 
             HSplitView {
                 ZStack {
-                    BrowserWebView(
-                        url: loadedURL,
-                        requestID: navigationRequestID,
-                        onDownloadStatus: { downloadStatus in
-                            submissionStatus = downloadStatus
-                        },
-                        onPageNavigation: { pageURL, pageTitle in
-                            updateSelectedTab(url: pageURL, title: pageTitle)
-                        }
-                    )
+                    // Keep an individual WKWebView alive for every tab. An
+                    // inactive tab is hidden rather than replaced, preserving
+                    // its loaded page, history, forms, and scroll position.
+                    ForEach(tabs) { tab in
+                        BrowserWebView(
+                            url: tab.url,
+                            requestID: navigationRequestIDs[tab.id, default: 0],
+                            onDownloadStatus: { downloadStatus in
+                                submissionStatus = downloadStatus
+                            },
+                            onPageNavigation: { pageURL, pageTitle in
+                                updateTab(id: tab.id, url: pageURL, title: pageTitle)
+                            }
+                        )
+                        .opacity(tab.id == selectedTabID ? 1 : 0)
+                        .allowsHitTesting(tab.id == selectedTabID)
+                        .accessibilityHidden(tab.id != selectedTabID)
+                    }
 
                     if let loadError {
                         VStack(spacing: 10) {
@@ -281,17 +288,15 @@ struct BrowserScreen: View {
 
         address = normalizedAddress
         loadError = nil
-        loadedURL = url
-        navigationRequestID += 1
-        updateSelectedTab(url: url, title: url.host ?? url.absoluteString)
+        updateTab(id: selectedTabID, url: url, title: url.host ?? url.absoluteString)
+        requestNavigation(for: selectedTabID)
     }
 
     private func openInBrowser(_ url: URL) {
         address = url.absoluteString
         loadError = nil
-        loadedURL = url
-        navigationRequestID += 1
-        updateSelectedTab(url: url, title: url.host ?? url.absoluteString)
+        updateTab(id: selectedTabID, url: url, title: url.host ?? url.absoluteString)
+        requestNavigation(for: selectedTabID)
     }
 
     private func addTab() {
@@ -303,28 +308,33 @@ struct BrowserScreen: View {
     private func select(_ tab: BrowserTab) {
         selectedTabID = tab.id
         address = tab.address
-        loadedURL = tab.url
         loadError = nil
-        navigationRequestID += 1
     }
 
     private func close(_ tab: BrowserTab) {
         guard tabs.count > 1, let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         tabs.remove(at: index)
+        navigationRequestIDs[tab.id] = nil
 
         if selectedTabID == tab.id {
             select(tabs[min(index, tabs.count - 1)])
         }
     }
 
-    private func updateSelectedTab(url: URL, title: String?) {
-        guard let index = tabs.firstIndex(where: { $0.id == selectedTabID }) else { return }
+    private func updateTab(id: UUID, url: URL, title: String?) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         tabs[index].url = url
         tabs[index].address = url.absoluteString
         tabs[index].title = title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             ? title!
             : (url.host ?? url.absoluteString)
-        address = url.absoluteString
+        if selectedTabID == id {
+            address = url.absoluteString
+        }
+    }
+
+    private func requestNavigation(for tabID: UUID) {
+        navigationRequestIDs[tabID, default: 0] += 1
     }
 
     private func submitMessage() {
