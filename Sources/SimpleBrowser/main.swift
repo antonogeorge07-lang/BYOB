@@ -53,6 +53,8 @@ struct BrowserTab: Identifiable {
 }
 
 struct BrowserScreen: View {
+    private static let defaultTabAddressKey = "default-tab-address"
+
     @State private var address = "https://www.apple.com"
     @State private var userName = BuildInfo.user
     @State private var requirements = ""
@@ -68,11 +70,16 @@ struct BrowserScreen: View {
     @State private var loadError: String?
     @State private var tabs: [BrowserTab]
     @State private var selectedTabID: UUID
+    @State private var isOptionsPresented = false
+    @State private var defaultWebsiteDraft = ""
+    @AppStorage(defaultTabAddressKey) private var defaultTabAddress = "https://www.apple.com"
 
     init() {
-        let firstTab = BrowserTab(url: URL(string: "https://www.apple.com")!, title: "Apple")
+        let firstURL = Self.defaultTabURL()
+        let firstTab = BrowserTab(url: firstURL, title: "New tab")
         _tabs = State(initialValue: [firstTab])
         _selectedTabID = State(initialValue: firstTab.id)
+        _address = State(initialValue: firstURL.absoluteString)
     }
 
     var body: some View {
@@ -138,6 +145,9 @@ struct BrowserScreen: View {
         } message: {
             Text("\(downloadedUpdate?.release.name ?? "The new version") has downloaded. Would you like to switch to it now?")
         }
+        .sheet(isPresented: $isOptionsPresented) {
+            optionsSheet
+        }
     }
 
     private var header: some View {
@@ -156,6 +166,14 @@ struct BrowserScreen: View {
 
                 Button("Open", action: openAddress)
                     .keyboardShortcut(.return, modifiers: .command)
+
+                Menu("Options") {
+                    Button("Default website…") {
+                        defaultWebsiteDraft = defaultTabAddress
+                        isOptionsPresented = true
+                    }
+                }
+                .help("Choose the website opened by new tabs")
             }
 
             HStack(spacing: 10) {
@@ -212,6 +230,34 @@ struct BrowserScreen: View {
                 .help("Open a new tab")
             }
         }
+    }
+
+    private var optionsSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Options")
+                .font(.headline)
+
+            Text("Default website for new tabs")
+                .foregroundStyle(.secondary)
+
+            NativeTextField(
+                placeholder: "https://example.com",
+                text: $defaultWebsiteDraft,
+                onReturn: saveDefaultWebsite
+            )
+            .frame(width: 360)
+
+            HStack {
+                Spacer()
+                Button("Cancel") {
+                    isOptionsPresented = false
+                }
+                Button("Save", action: saveDefaultWebsite)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 440)
     }
 
     private var submissionPane: some View {
@@ -300,9 +346,36 @@ struct BrowserScreen: View {
     }
 
     private func addTab() {
-        let tab = BrowserTab(url: URL(string: "https://www.apple.com")!, title: "New tab")
+        let tab = BrowserTab(url: Self.defaultTabURL(), title: "New tab")
         tabs.append(tab)
         select(tab)
+    }
+
+    private func saveDefaultWebsite() {
+        guard let url = Self.url(from: defaultWebsiteDraft) else {
+            loadError = "Enter a valid http or https web address for new tabs."
+            return
+        }
+
+        defaultTabAddress = url.absoluteString
+        isOptionsPresented = false
+    }
+
+    private static func defaultTabURL() -> URL {
+        let savedAddress = UserDefaults.standard.string(forKey: defaultTabAddressKey) ?? "https://www.apple.com"
+        return url(from: savedAddress) ?? URL(string: "https://www.apple.com")!
+    }
+
+    private static func url(from address: String) -> URL? {
+        let trimmedAddress = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedAddress = trimmedAddress.contains("://") ? trimmedAddress : "https://\(trimmedAddress)"
+        guard let url = URL(string: normalizedAddress),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host != nil else {
+            return nil
+        }
+        return url
     }
 
     private func select(_ tab: BrowserTab) {
